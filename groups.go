@@ -14,10 +14,10 @@ import (
 
 func getGroups(api *slack.Client) *ldap.SearchResult {
 	l, err := ldap.Dial("tcp", LDAPCredentials.server)
-	errorCheck(api, err, "pmd", "ADIR_GROUPS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
 	defer l.Close()
 	err = l.Bind(LDAPCredentials.username, LDAPCredentials.password)
-	errorCheck(api, err, "pmd", "ADIR_GROUPS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
 
 	searchRequest := ldap.NewSearchRequest(
 		"DC=office,DC=amsiag,DC=com", // The base dn to search
@@ -32,7 +32,7 @@ func getGroups(api *slack.Client) *ldap.SearchResult {
 	)
 
 	searchResult, err := l.SearchWithPaging(searchRequest, math.MaxInt32)
-	errorCheck(api, err, "pmd", "ADIR_GROUPS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
 	l.Close()
 	return searchResult
 }
@@ -40,7 +40,7 @@ func getGroups(api *slack.Client) *ldap.SearchResult {
 func insertGroupsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 
 	db, err := sql.Open("goracle", AmsOracleCredentials)
-	errorCheck(api, err, "pmd", "ADIR_GROUPS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
 	defer db.Close()
 
 	var DESCRIPTION,
@@ -103,7 +103,7 @@ func insertGroupsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXPORTDATETIME = append(EXPORTDATETIME, time.Now().String())
 	}
 	_, err = db.Exec(groupTruncate)
-	errorCheck(api, err, "pmd", "ADIR_GROUPS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
 
 	_, err = db.Exec(groupInsertSQL, DESCRIPTION,
 		DISPLAYNAME,
@@ -133,7 +133,7 @@ func insertGroupsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		MSEXCHEXTENSIONATTRIBUTE20,
 		DLMEMSUBMITPERMS,
 		EXPORTDATETIME)
-	errorCheck(api, err, "pmd", "ADIR_GROUPS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
 
 }
 
@@ -142,7 +142,7 @@ func insertGroupsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 // Truncates and Inserts into oracle ADIR_GROUPS_E Table
 // Sends Log on case of fail via SLACK API
 func Groups() {
-	api := slack.New(SlackToken)
+	api := slack.New(SlackConfig.token)
 	searchResult := getGroups(api)
 	insertGroupsOracle(api, searchResult)
 

@@ -14,10 +14,10 @@ import (
 
 func getContacts(api *slack.Client) *ldap.SearchResult {
 	l, err := ldap.Dial("tcp", LDAPCredentials.server)
-	errorCheck(api, err, "pmd", "ADIR_CONTACTS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
 	defer l.Close()
 	err = l.Bind(LDAPCredentials.username, LDAPCredentials.password)
-	errorCheck(api, err, "pmd", "ADIR_CONTACTS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
 
 	searchRequest := ldap.NewSearchRequest(
 		"OU=SPSAddressList,DC=office,DC=amsiag,DC=com", // The base dn to search
@@ -32,7 +32,7 @@ func getContacts(api *slack.Client) *ldap.SearchResult {
 	)
 
 	searchResult, err := l.SearchWithPaging(searchRequest, math.MaxInt32)
-	errorCheck(api, err, "pmd", "ADIR_CONTACTS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
 	l.Close()
 	return searchResult
 }
@@ -40,7 +40,7 @@ func getContacts(api *slack.Client) *ldap.SearchResult {
 func insertContactsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 
 	db, err := sql.Open("goracle", AmsOracleCredentials)
-	errorCheck(api, err, "pmd", "ADIR_CONTACTS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
 	defer db.Close()
 
 	var DISPLAYNAME,
@@ -86,7 +86,7 @@ func insertContactsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXPORTDATETIME = append(EXPORTDATETIME, time.Now().String())
 	}
 	_, err = db.Exec(contactTruncate)
-	errorCheck(api, err, "pmd", "ADIR_CONTACTS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
 
 	_, err = db.Exec(contactInsertSQL,
 		DISPLAYNAME,
@@ -110,7 +110,7 @@ func insertContactsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		MSEXCHEXTENSIONATTRIBUTE20,
 		MSEXCHREQUIREAUTHTOSENDTO,
 		EXPORTDATETIME)
-	errorCheck(api, err, "pmd", "ADIR_CONTACTS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
 
 }
 
@@ -119,7 +119,7 @@ func insertContactsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 // Truncates and Inserts into oracle ADIR_GROUPS_E Table
 // Sends Log on case of fail via SLACK API
 func Contacts() {
-	api := slack.New(SlackToken)
+	api := slack.New(SlackConfig.token)
 	searchResult := getContacts(api)
 	insertContactsOracle(api, searchResult)
 

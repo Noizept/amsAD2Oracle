@@ -15,11 +15,11 @@ import (
 
 func getUsers(api *slack.Client) *ldap.SearchResult {
 	l, err := ldap.Dial("tcp", LDAPCredentials.server)
-	errorCheck(api, err, "pmd", "ADIR_USERS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
 	defer l.Close()
 	err = l.Bind(LDAPCredentials.username, LDAPCredentials.password)
 
-	errorCheck(api, err, "pmd", "ADIR_USERS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
 
 	searchRequest := ldap.NewSearchRequest(
 		"OU=ams user,DC=office,DC=amsiag,DC=com", // The base dn to search
@@ -34,7 +34,7 @@ func getUsers(api *slack.Client) *ldap.SearchResult {
 	)
 
 	searchResult, err := l.SearchWithPaging(searchRequest, math.MaxInt32)
-	errorCheck(api, err, "pmd", "ADIR_USERS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
 	l.Close()
 	return searchResult
 }
@@ -42,7 +42,7 @@ func getUsers(api *slack.Client) *ldap.SearchResult {
 func insertUsersOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 
 	db, err := sql.Open("goracle", AmsOracleCredentials)
-	errorCheck(api, err, "pmd", "ADIR_USERS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
 	defer db.Close()
 	var ACCOUNTEXPIRES []uint64
 	var C,
@@ -144,7 +144,7 @@ func insertUsersOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXPORTDATETIME = append(EXPORTDATETIME, time.Now().String())
 	}
 	_, err = db.Exec(usersTruncate)
-	errorCheck(api, err, "pmd", "ADIR_USERS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
 
 	_, err = db.Exec(usersInsertSQL, ACCOUNTEXPIRES,
 		C,
@@ -194,7 +194,7 @@ func insertUsersOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXTENSIONATTRIBUTE9,
 		MSEXCHREQUIREAUTHTOSENDTO,
 		EXPORTDATETIME)
-	errorCheck(api, err, "pmd", "ADIR_USERS_E")
+	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
 
 }
 
@@ -203,7 +203,7 @@ func insertUsersOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 // Truncates and Inserts into oracle ADIR_USER_E Table
 // Sends Log on case of fail via SLACK API
 func Users() {
-	api := slack.New(SlackToken)
+	api := slack.New(SlackConfig.token)
 	searchResult := getUsers(api)
 	insertUsersOracle(api, searchResult)
 

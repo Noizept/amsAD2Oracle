@@ -5,6 +5,23 @@ var SlackToken string = "myToken"
 
 // AmsOracleCredentials Credentials to connect into database format USER/PASSWORD@SERVER
 var AmsOracleCredentials string = "Connection-String"
+// SlackConfiguration struct for Slack notifications
+type SlackConfiguration struct {
+	token string
+	channel string
+}
+
+
+// SetToken set SlackConfig token
+func (slack *SlackConfiguration) SetToken(token string) {
+	slack.token = token
+}
+
+// SetChannel set SlackConfig channel
+func (slack *SlackConfiguration) SetChannel(channel string) {
+	slack.channel = channel
+}
+
 
 // LDAPConnection Connection struct for LDAP
 type LDAPConnection struct {
@@ -30,3 +47,5 @@ func (conn *LDAPConnection) SetServer(server string) {
 
 // LDAPCredentials Default
 var LDAPCredentials *LDAPConnection = &LDAPConnection{username: "ldapUsername", password: "ldapPassword", server: "ldapServer"}
+// SlackConfig Default
+var SlackConfig *SlackConfiguration = &SlackConfiguration{token: "myToken", channel: "myChanell"}
