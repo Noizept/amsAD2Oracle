@@ -2,6 +2,12 @@
 
 # Step 1
 
+Install the Package
+
+`go get github.com/Noizept/amsAD2Oracle`
+
+# Step 2
+
 Overwrite the constants :
 
 - SlackConfig
