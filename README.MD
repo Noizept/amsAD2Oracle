@@ -14,6 +14,15 @@ Setup configuration structs
 Example usage with concurrent processing
 
 ```
+package main
+
+import (
+	"fmt"
+	amsAD2Oracle "github.com/Noizept/amsAD2Oracle"
+	"sync"
+	"time"
+)
+
 func main() {
 	var wg sync.WaitGroup
 	fmt.Println(time.Now().String())
