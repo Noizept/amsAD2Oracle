@@ -3,95 +3,92 @@ package adsync
 import (
 	"database/sql"
 	"fmt"
-	"html"
-	"math"
-	"strconv"
-	"time"
-
-	ldap "github.com/go-ldap/ldap/v3"
+	"github.com/go-ldap/ldap/v3"
 	"github.com/nlopes/slack"
 	_ "gopkg.in/goracle.v2"
+	"html"
+	"strconv"
+	"time"
 )
 
-func getUsers(api *slack.Client) *ldap.SearchResult {
-	l, err := ldap.Dial("tcp", LDAPCredentials.server)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
-	defer l.Close()
-	err = l.Bind(LDAPCredentials.username, LDAPCredentials.password)
-
-	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
-
-	searchRequest := ldap.NewSearchRequest(
-		"OU=ams user,DC=office,DC=amsiag,DC=com", // The base dn to search
-		ldap.ScopeWholeSubtree,
-		ldap.NeverDerefAliases,
-		math.MaxInt32,
-		0,
-		false,
-		"(&(objectClass=person))", // The filter to apply
-		usersAttributesAD,         // A list attributes to retrieve
-		nil,
-	)
-
-	searchResult, err := l.SearchWithPaging(searchRequest, math.MaxInt32)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
-	l.Close()
-	return searchResult
+//User Table ETL
+type User struct {
+	ams AMSETL
 }
 
-func insertUsersOracle(api *slack.Client, searchResult *ldap.SearchResult) {
+func (user *User) Sync(){
+	api := slack.New(user.ams.SlackConfig.Token)
 
-	db, err := sql.Open("goracle", AmsOracleCredentials)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
+	searchResult,err := user.ams.GetEntries()
+	errorCheck(api,err, user.ams.SlackConfig.Channel,"ADIR_USERS_E")
+
+	err = user.insertOracle(searchResult)
+	errorCheck(api,err, user.ams.SlackConfig.Channel,"ADIR_USERS_E")
+
+
+}
+
+
+//SetConfigs initiates the configurations for the User Struct
+func (user *User) SetConfigs(conf AMSETL){
+	user.ams = conf
+}
+
+func (user *User)  insertOracle (searchResult *ldap.SearchResult) (err error) {
+
+	db, err := sql.Open("goracle", user.ams.AmsOracleCredentials)
+	if err!= nil {
+		return err
+	}
 	defer db.Close()
 	var ACCOUNTEXPIRES []uint64
 	var C,
-		CO,
-		COMPANY,
-		COUNTRYCODE,
-		DEPARTMENT,
-		DESCRIPTION,
-		DISPLAYNAME,
-		DISTINGUISHEDNAME,
-		EMPLOYEEID,
-		EXTENSIONATTRIBUTE1,
-		EXTENSIONATTRIBUTE2,
-		EXTENSIONATTRIBUTE3,
-		EXTENSIONATTRIBUTE4,
-		EXTENSIONATTRIBUTE5,
-		EXTENSIONATTRIBUTE8,
-		EXTENSIONATTRIBUTE10,
-		EXTENSIONATTRIBUTE12,
-		EXTENSIONATTRIBUTE15,
-		FACSIMILETELEPHONENUMBER,
-		GIVENNAME,
-		IPPHONE,
-		L,
-		MAIL,
-		MEMBEROF,
-		MOBILE,
-		MSEXCHHIDEFROMADDRESSLISTS,
-		OBJECTCATEGORY,
-		OBJECTGUID,
-		OTHERTELEPHONE,
-		PHYSICALDELIVERYOFFICENAME,
-		POSTALCODE,
-		PROXYADDRESSES,
-		ROOMNUMBER,
-		SAMACCOUNTNAME,
-		SN,
-		STREETADDRESS,
-		TELEPHONENUMBER,
-		TITLE,
-		WHENCHANGED,
-		WHENCREATED,
-		SAMACCOUNTTYPE,
-		MSEXCHEXTENSIONATTRIBUTE20,
-		INFO,
-		LASTLOGON,
-		EXTENSIONATTRIBUTE9,
-		MSEXCHREQUIREAUTHTOSENDTO,
-		EXPORTDATETIME []string
+	CO,
+	COMPANY,
+	COUNTRYCODE,
+	DEPARTMENT,
+	DESCRIPTION,
+	DISPLAYNAME,
+	DISTINGUISHEDNAME,
+	EMPLOYEEID,
+	EXTENSIONATTRIBUTE1,
+	EXTENSIONATTRIBUTE2,
+	EXTENSIONATTRIBUTE3,
+	EXTENSIONATTRIBUTE4,
+	EXTENSIONATTRIBUTE5,
+	EXTENSIONATTRIBUTE8,
+	EXTENSIONATTRIBUTE10,
+	EXTENSIONATTRIBUTE12,
+	EXTENSIONATTRIBUTE15,
+	FACSIMILETELEPHONENUMBER,
+	GIVENNAME,
+	IPPHONE,
+	L,
+	MAIL,
+	MEMBEROF,
+	MOBILE,
+	MSEXCHHIDEFROMADDRESSLISTS,
+	OBJECTCATEGORY,
+	OBJECTGUID,
+	OTHERTELEPHONE,
+	PHYSICALDELIVERYOFFICENAME,
+	POSTALCODE,
+	PROXYADDRESSES,
+	ROOMNUMBER,
+	SAMACCOUNTNAME,
+	SN,
+	STREETADDRESS,
+	TELEPHONENUMBER,
+	TITLE,
+	WHENCHANGED,
+	WHENCREATED,
+	SAMACCOUNTTYPE,
+	MSEXCHEXTENSIONATTRIBUTE20,
+	INFO,
+	LASTLOGON,
+	EXTENSIONATTRIBUTE9,
+	MSEXCHREQUIREAUTHTOSENDTO,
+	EXPORTDATETIME []string
 	for _, entry := range searchResult.Entries {
 		accExpeires, _ := strconv.ParseUint(entry.GetAttributeValue("accountExpires"), 10, 32)
 		ACCOUNTEXPIRES = append(ACCOUNTEXPIRES, accExpeires)
@@ -144,8 +141,9 @@ func insertUsersOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXPORTDATETIME = append(EXPORTDATETIME, time.Now().String())
 	}
 	_, err = db.Exec(usersTruncate)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
-
+	if err!= nil {
+		return err
+	}
 	_, err = db.Exec(usersInsertSQL, ACCOUNTEXPIRES,
 		C,
 		CO,
@@ -194,17 +192,13 @@ func insertUsersOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXTENSIONATTRIBUTE9,
 		MSEXCHREQUIREAUTHTOSENDTO,
 		EXPORTDATETIME)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_USERS_E")
+	if err!= nil {
+		return err
+	}
+	return nil
 
 }
 
-// Users Syncronizhes the ADIR_USER_E table with Active Directory
-// It Connects to Active directory and fetches all Users
-// Truncates and Inserts into oracle ADIR_USER_E Table
-// Sends Log on case of fail via SLACK API
-func Users() {
-	api := slack.New(SlackConfig.token)
-	searchResult := getUsers(api)
-	insertUsersOracle(api, searchResult)
 
-}
+
+

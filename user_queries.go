@@ -1,6 +1,6 @@
 package adsync
 
-var usersAttributesAD = []string{
+var UsersAttributesAD = []string{
 	"accountExpires",
 	"c",
 	"co",

@@ -1,6 +1,6 @@
 package adsync
 
-var groupAttributesAD = []string{
+var GroupAttributesAD = []string{
 	"description",
 	"displayName",
 	"distinguishedName",

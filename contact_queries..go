@@ -1,6 +1,6 @@
 package adsync
 
-var contactAttributesAD = []string{
+var ContactAttributesAD = []string{
 	"displayName",
 	"distinguishedName",
 	"givenName",

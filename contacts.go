@@ -3,66 +3,60 @@ package adsync
 import (
 	"database/sql"
 	"fmt"
-	"html"
-	"math"
-	"time"
-
-	ldap "github.com/go-ldap/ldap/v3"
+	"github.com/go-ldap/ldap/v3"
 	"github.com/nlopes/slack"
 	_ "gopkg.in/goracle.v2"
+	"html"
+	"time"
 )
 
-func getContacts(api *slack.Client) *ldap.SearchResult {
-	l, err := ldap.Dial("tcp", LDAPCredentials.server)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
-	defer l.Close()
-	err = l.Bind(LDAPCredentials.username, LDAPCredentials.password)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
-
-	searchRequest := ldap.NewSearchRequest(
-		"OU=SPSAddressList,DC=office,DC=amsiag,DC=com", // The base dn to search
-		ldap.ScopeWholeSubtree,
-		ldap.NeverDerefAliases,
-		math.MaxInt32,
-		0,
-		false,
-		"(&(objectClass=contact))", // The filter to apply
-		contactAttributesAD,        // A list attributes to retrieve
-		nil,
-	)
-
-	searchResult, err := l.SearchWithPaging(searchRequest, math.MaxInt32)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
-	l.Close()
-	return searchResult
+//Contact Table ETL
+type Contact struct {
+	ams AMSETL
 }
 
-func insertContactsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
+func (contact *Contact) Sync(){
+	api := slack.New(contact.ams.SlackConfig.Token)
 
-	db, err := sql.Open("goracle", AmsOracleCredentials)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
+	searchResult,err := contact.ams.GetEntries()
+	errorCheck(api,err, contact.ams.SlackConfig.Channel,"ADIR_GROUPS_E")
+
+	err = contact.insertOracle(searchResult)
+	errorCheck(api,err, contact.ams.SlackConfig.Channel,"ADIR_CONTACTS_E")
+}
+
+
+//SetConfigs initiates the configurations for the Contact Struct
+func (contact *Contact) SetConfigs(conf AMSETL){
+	contact.ams = conf
+}
+
+func (contact *Contact)  insertOracle (searchResult *ldap.SearchResult) (err error) {
+	db, err := sql.Open("goracle", contact.ams.AmsOracleCredentials)
+	if err!= nil {
+		return err
+	}
 	defer db.Close()
-
 	var DISPLAYNAME,
-		DISTINGUISHEDNAME,
-		GIVENNAME,
-		CONTACTNAME,
-		OBJECTGUID,
-		SN,
-		TELEPHONENUMBER,
-		WHENCREATED,
-		WHENCHANGED,
-		CN,
-		COMPANY,
-		MAIL,
-		MAILNICKNAME,
-		MEMBEROF,
-		MSEXCHHIDEFROMADDRESSLISTS,
-		OBJECTCATEGORY,
-		PROXYADDRESSES,
-		MSEXCHEXTENSIONATTRIBUTE20,
-		MSEXCHREQUIREAUTHTOSENDTO,
-		EXPORTDATETIME []string
+	DISTINGUISHEDNAME,
+	GIVENNAME,
+	CONTACTNAME,
+	OBJECTGUID,
+	SN,
+	TELEPHONENUMBER,
+	WHENCREATED,
+	WHENCHANGED,
+	CN,
+	COMPANY,
+	MAIL,
+	MAILNICKNAME,
+	MEMBEROF,
+	MSEXCHHIDEFROMADDRESSLISTS,
+	OBJECTCATEGORY,
+	PROXYADDRESSES,
+	MSEXCHEXTENSIONATTRIBUTE20,
+	MSEXCHREQUIREAUTHTOSENDTO,
+	EXPORTDATETIME []string
 	for _, entry := range searchResult.Entries {
 		DISPLAYNAME = append(DISPLAYNAME, html.EscapeString(entry.GetAttributeValue("displayName")))
 		DISTINGUISHEDNAME = append(DISTINGUISHEDNAME, html.EscapeString(entry.GetAttributeValue("distinguishedName")))
@@ -86,8 +80,9 @@ func insertContactsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXPORTDATETIME = append(EXPORTDATETIME, time.Now().String())
 	}
 	_, err = db.Exec(contactTruncate)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
-
+	if err!= nil {
+		return err
+	}
 	_, err = db.Exec(contactInsertSQL,
 		DISPLAYNAME,
 		DISPLAYNAME,
@@ -110,17 +105,8 @@ func insertContactsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		MSEXCHEXTENSIONATTRIBUTE20,
 		MSEXCHREQUIREAUTHTOSENDTO,
 		EXPORTDATETIME)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_CONTACTS_E")
-
-}
-
-// Contacts Syncronizhes the ADIR_CONTACTS_E table with Active Directory
-// It Connects to Active directory and fetches all Users
-// Truncates and Inserts into oracle ADIR_GROUPS_E Table
-// Sends Log on case of fail via SLACK API
-func Contacts() {
-	api := slack.New(SlackConfig.token)
-	searchResult := getContacts(api)
-	insertContactsOracle(api, searchResult)
-
+	if err!= nil {
+		return err
+	}
+	return nil
 }

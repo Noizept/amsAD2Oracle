@@ -3,74 +3,71 @@ package adsync
 import (
 	"database/sql"
 	"fmt"
-	"html"
-	"math"
-	"time"
-
-	ldap "github.com/go-ldap/ldap/v3"
+	"github.com/go-ldap/ldap/v3"
 	"github.com/nlopes/slack"
 	_ "gopkg.in/goracle.v2"
+	"html"
+	"time"
 )
 
-func getGroups(api *slack.Client) *ldap.SearchResult {
-	l, err := ldap.Dial("tcp", LDAPCredentials.server)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
-	defer l.Close()
-	err = l.Bind(LDAPCredentials.username, LDAPCredentials.password)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
-
-	searchRequest := ldap.NewSearchRequest(
-		"DC=office,DC=amsiag,DC=com", // The base dn to search
-		ldap.ScopeWholeSubtree,
-		ldap.NeverDerefAliases,
-		math.MaxInt32,
-		0,
-		false,
-		"(&(objectCategory=group)(objectClass=group))", // The filter to apply
-		groupAttributesAD, // A list attributes to retrieve
-		nil,
-	)
-
-	searchResult, err := l.SearchWithPaging(searchRequest, math.MaxInt32)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
-	l.Close()
-	return searchResult
+//Group Table ETL
+type Group struct {
+	ams AMSETL
 }
 
-func insertGroupsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
+func (group *Group) Sync(){
+	api := slack.New(group.ams.SlackConfig.Token)
 
-	db, err := sql.Open("goracle", AmsOracleCredentials)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
+	searchResult,err := group.ams.GetEntries()
+	errorCheck(api,err, group.ams.SlackConfig.Channel,"ADIR_GROUPS_E")
+
+	err = group.insertOracle(searchResult)
+	errorCheck(api,err, group.ams.SlackConfig.Channel,"ADIR_GROUPS_E")
+
+
+}
+
+
+//SetConfigs initiates the configurations for the Group Struct
+func (group *Group) SetConfigs(conf AMSETL){
+	group.ams = conf
+}
+
+func (group *Group)  insertOracle (searchResult *ldap.SearchResult) (err error) {
+
+	db, err := sql.Open("goracle", group.ams.AmsOracleCredentials)
+	if err!= nil {
+		return err
+	}
 	defer db.Close()
-
 	var DESCRIPTION,
-		DISPLAYNAME,
-		DISTINGUISHEDNAME,
-		GROUPTYPE,
-		MAIL,
-		MANAGEDBY,
-		MEMBEROF,
-		MSEXCHHIDEFROMADDRESSLISTS,
-		OBJECTCATEGORY,
-		OBJECTGUID,
-		PROXYADDRESSES,
-		SAMACCOUNTNAME,
-		SAMACCOUNTTYPE,
-		WHENCHANGED,
-		WHENCREATED,
-		INFO,
-		MAILNICKNAME,
-		MSEXCHALOBJECTVERSION,
-		MSEXCHARBITRATIONMAILBOX,
-		MSEXCHRECIEPIENTDISPLAYTYPE,
-		SHOWINADDRESSBOOK,
-		MEMBERS,
-		MSEXCHCOMANAGEDBYLINK,
-		MSEXCHREQUIREAUTHTOSENDTO,
-		GIDNUMBER,
-		MSEXCHEXTENSIONATTRIBUTE20,
-		DLMEMSUBMITPERMS,
-		EXPORTDATETIME []string
+	DISPLAYNAME,
+	DISTINGUISHEDNAME,
+	GROUPTYPE,
+	MAIL,
+	MANAGEDBY,
+	MEMBEROF,
+	MSEXCHHIDEFROMADDRESSLISTS,
+	OBJECTCATEGORY,
+	OBJECTGUID,
+	PROXYADDRESSES,
+	SAMACCOUNTNAME,
+	SAMACCOUNTTYPE,
+	WHENCHANGED,
+	WHENCREATED,
+	INFO,
+	MAILNICKNAME,
+	MSEXCHALOBJECTVERSION,
+	MSEXCHARBITRATIONMAILBOX,
+	MSEXCHRECIEPIENTDISPLAYTYPE,
+	SHOWINADDRESSBOOK,
+	MEMBERS,
+	MSEXCHCOMANAGEDBYLINK,
+	MSEXCHREQUIREAUTHTOSENDTO,
+	GIDNUMBER,
+	MSEXCHEXTENSIONATTRIBUTE20,
+	DLMEMSUBMITPERMS,
+	EXPORTDATETIME []string
 	for _, entry := range searchResult.Entries {
 
 		DESCRIPTION = append(DESCRIPTION, html.EscapeString(entry.GetAttributeValue("description")))
@@ -103,8 +100,9 @@ func insertGroupsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		EXPORTDATETIME = append(EXPORTDATETIME, time.Now().String())
 	}
 	_, err = db.Exec(groupTruncate)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
-
+	if err!= nil {
+		return err
+	}
 	_, err = db.Exec(groupInsertSQL, DESCRIPTION,
 		DISPLAYNAME,
 		DISTINGUISHEDNAME,
@@ -133,17 +131,8 @@ func insertGroupsOracle(api *slack.Client, searchResult *ldap.SearchResult) {
 		MSEXCHEXTENSIONATTRIBUTE20,
 		DLMEMSUBMITPERMS,
 		EXPORTDATETIME)
-	errorCheck(api, err, SlackConfig.channel, "ADIR_GROUPS_E")
-
-}
-
-// Groups Syncronizhes the ADIR_GROUPS_E table with Active Directory
-// It Connects to Active directory and fetches all Users
-// Truncates and Inserts into oracle ADIR_GROUPS_E Table
-// Sends Log on case of fail via SLACK API
-func Groups() {
-	api := slack.New(SlackConfig.token)
-	searchResult := getGroups(api)
-	insertGroupsOracle(api, searchResult)
-
+	if err!= nil {
+		return err
+	}
+	return nil
 }
