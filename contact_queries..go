@@ -1,5 +1,6 @@
 package adsync
 
+// ContactAttributesAD List of attributes to be retrieved from active directory
 var ContactAttributesAD = []string{
 	"displayName",
 	"distinguishedName",

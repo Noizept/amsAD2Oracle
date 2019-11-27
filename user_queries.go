@@ -1,5 +1,6 @@
 package adsync
 
+// UsersAttributesAD List of attributes to be retrieved from active directory
 var UsersAttributesAD = []string{
 	"accountExpires",
 	"c",

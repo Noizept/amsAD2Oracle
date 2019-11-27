@@ -1,5 +1,6 @@
 package adsync
 
+// GroupAttributesAD List of attributes to be retrieved from active directory
 var GroupAttributesAD = []string{
 	"description",
 	"displayName",
